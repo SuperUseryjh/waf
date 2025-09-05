@@ -8,13 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpcre3-dev \
     zlib1g-dev \
-    libssl-dev     && apt-get install -y --no-install-recommends wget luarocks     && luarocks install lua-resty-redis     && rm -rf /var/lib/apt/lists/*
+    libssl-dev     && apt-get install -y --no-install-recommends wget curl luarocks     && luarocks install lua-resty-redis     && rm -rf /var/lib/apt/lists/*
 
 # Download and compile ngx_http_lua_module
 RUN git clone https://github.com/openresty/lua-nginx-module.git /usr/local/src/lua-nginx-module
 RUN git clone https://github.com/simpl/ngx_devel_kit.git /usr/local/src/ngx_devel_kit
 
-RUN wget http://nginx.org/download/nginx-1.24.0.tar.gz -O /tmp/nginx.tar.gz \
+RUN curl -L http://nginx.org/download/nginx-1.24.0.tar.gz -o /tmp/nginx.tar.gz \
     && tar -zxvf /tmp/nginx.tar.gz -C /tmp \
     && cd /tmp/nginx-1.24.0 \
     && ./configure --prefix=/etc/nginx \
