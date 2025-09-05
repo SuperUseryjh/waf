@@ -8,9 +8,45 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
             background-color: #f4f4f4;
             color: #333;
+            display: flex;
+        }
+        .sidebar {
+            width: 200px;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            height: 100vh;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        .sidebar h2 {
+            color: #ecf0f1;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+        .sidebar ul li {
+            margin-bottom: 10px;
+        }
+        .sidebar ul li a {
+            color: #ecf0f1;
+            text-decoration: none;
+            padding: 10px 15px;
+            display: block;
+            border-radius: 5px;
+        }
+        .sidebar ul li a:hover,
+        .sidebar ul li a.active {
+            background-color: #34495e;
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 20px;
         }
         .container {
             background-color: #fff;
@@ -72,68 +108,120 @@
             width: 100%;
             margin-top: 30px;
         }
+        .hidden {
+            display: none;
+        }
     </style>
-    <!-- <meta http-equiv="refresh" content="5"> Refresh every 5 seconds -->
 </head>
 <body>
-    <div class="container">
-        <h1>WAF 实时监控面板</h1>
-        <div class="stats">
-            <div class="stat-box">
-                <h2>唯一访问者 (IP)</h2>
-                <p>{{ unique_ips }}</p>
-            </div>
-            <div class="stat-box">
-                <h2>近 24 小时访问数</h2>
-                <p>{{ total_requests_24h }}</p>
-            </div>
-        </div>
-
-        <div class="chart-container">
-            <h2>唯一访问者趋势 (近 24 小时)</h2>
-            <canvas id="uniqueIpsChart"></canvas>
-        </div>
-
-        <div class="chart-container">
-            <h2>总访问数趋势 (近 24 小时)</h2>
-            <canvas id="totalRequestsChart"></canvas>
-        </div>
+    <div class="sidebar">
+        <h2>WAF Dashboard</h2>
+        <ul>
+            <li><a href="#" class="active" onclick="showPanel('waf-monitor')">WAF 监控</a></li>
+            <li><a href="#" onclick="showPanel('system-monitor')">系统资源监控</a></li>
+            <li><a href="#" onclick="showPanel('docker-containers')">Docker 容器</a></li>
+        </ul>
     </div>
 
-    <div class="container">
-        <h2>本地 Docker 容器</h2>
-        {% if containers %}
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>名称</th>
-                    <th>状态</th>
-                    <th>镜像</th>
-                    <th>端口</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for container in containers %}
-                <tr>
-                    <td>{{ container.id }}</td>
-                    <td>{{ container.name }}</td>
-                    <td>{{ container.status }}</td>
-                    <td>{{ container.image }}</td>
-                    <td>{{ container.ports }}</td>
-                    <td><a href="{{ url_for('configure_waf', container_name=container.name) }}" class="action-link">配置 WAF</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p>未找到运行中的 Docker 容器。</p>
-        {% endif %}
+    <div class="main-content">
+        <div id="waf-monitor" class="panel">
+            <div class="container">
+                <h1>WAF 实时监控���板</h1>
+                <div class="stats">
+                    <div class="stat-box">
+                        <h2>唯一访问者 (IP)</h2>
+                        <p>{{ unique_ips }}</p>
+                    </div>
+                    <div class="stat-box">
+                        <h2>近 24 小时访问数</h2>
+                        <p>{{ total_requests_24h }}</p>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <h2>唯一访问者趋势 (近 24 小时)</h2>
+                    <canvas id="uniqueIpsChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h2>总访问数趋势 (近 24 小时)</h2>
+                    <canvas id="totalRequestsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="system-monitor" class="panel hidden">
+            <div class="container">
+                <h1>系统资源监控</h1>
+                <div class="chart-container">
+                    <h2>CPU 使用率 (近 24 小时)</h2>
+                    <canvas id="cpuChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>内存使用率 (近 24 小时)</h2>
+                    <canvas id="memoryChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>磁盘使用率 (近 24 小时)</h2>
+                    <canvas id="diskChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>网络 I/O (近 24 小时)</h2>
+                    <canvas id="networkChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="docker-containers" class="panel hidden">
+            <div class="container">
+                <h2>本地 Docker 容器</h2>
+                {% if containers %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>名称</th>
+                            <th>状态</th>
+                            <th>镜像</th>
+                            <th>端口</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for container in containers %}
+                        <tr>
+                            <td>{{ container.id }}</td>
+                            <td>{{ container.name }}</td>
+                            <td>{{ container.status }}</td>
+                            <td>{{ container.image }}</td>
+                            <td>{{ container.ports }}</td>
+                            <td><a href="{{ url_for('configure_waf', container_name=container.name) }}" class="action-link">配置 WAF</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>未找到运行中的 Docker 容器。</p>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <script>
-        // Unique IPs Chart
+        // Function to show/hide panels
+        function showPanel(panelId) {
+            document.querySelectorAll('.panel').forEach(panel => {
+                panel.classList.add('hidden');
+            });
+            document.getElementById(panelId).classList.remove('hidden');
+
+            document.querySelectorAll('.sidebar ul li a').forEach(link => {
+                link.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // WAF Charts
         const uniqueIpsCtx = document.getElementById('uniqueIpsChart').getContext('2d');
         new Chart(uniqueIpsCtx, {
             type: 'line',
@@ -157,7 +245,6 @@
             }
         });
 
-        // Total Requests Chart
         const totalRequestsCtx = document.getElementById('totalRequestsChart').getContext('2d');
         new Chart(totalRequestsCtx, {
             type: 'line',
@@ -176,6 +263,128 @@
                 scales: {
                     y: {
                         beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // System Metrics Charts
+        const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+        new Chart(cpuCtx, {
+            type: 'line',
+            data: {
+                labels: {{ cpu_labels | tojson }},
+                datasets: [{
+                    label: 'CPU 使用率 (%)',
+                    data: {{ cpu_data | tojson }},
+                    borderColor: 'rgb(54, 162, 235)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        const memoryCtx = document.getElementById('memoryChart').getContext('2d');
+        new Chart(memoryCtx, {
+            type: 'line',
+            data: {
+                labels: {{ memory_labels | tojson }},
+                datasets: [{
+                    label: '内存使用率 (%)',
+                    data: {{ memory_data | tojson }},
+                    borderColor: 'rgb(255, 206, 86)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        const diskCtx = document.getElementById('diskChart').getContext('2d');
+        new Chart(diskCtx, {
+            type: 'line',
+            data: {
+                labels: {{ disk_labels | tojson }},
+                datasets: [{
+                    label: '磁盘使用率 (%)',
+                    data: {{ disk_data | tojson }},
+                    borderColor: 'rgb(153, 102, 255)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        const networkCtx = document.getElementById('networkChart').getContext('2d');
+        new Chart(networkCtx, {
+            type: 'line',
+            data: {
+                labels: {{ network_labels | tojson }},
+                datasets: [
+                    {
+                        label: '发送字节数',
+                        data: {{ network_sent_data | tojson }},
+                        borderColor: 'rgb(255, 159, 64)',
+                        tension: 0.1,
+                        fill: false
+                    },
+                    {
+                        label: '接收字节数',
+                        data: {{ network_recv_data | tojson }},
+                        borderColor: 'rgb(0, 204, 102)',
+                        tension: 0.1,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value, index, ticks) {
+                                return (value / (1024 * 1024)).toFixed(2) + ' MB'; // Convert bytes to MB
+                            }
+                        }
+                    }
+                },
+                tooltips: {
+                    callbacks: {
+                        label: function(tooltipItem, data) {
+                            var label = data.datasets[tooltipItem.datasetIndex].label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            label += (tooltipItem.yLabel / (1024 * 1024)).toFixed(2) + ' MB';
+                            return label;
+                        }
                     }
                 }
             }
