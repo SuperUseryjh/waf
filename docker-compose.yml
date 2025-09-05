@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  nginx-waf:
+    build: .
+    ports:
+      - "80:80"
+    depends_on:
+      - redis
+    networks:
+      - waf-network
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    networks:
+      - waf-network
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+    networks:
+      - waf-network
+
+networks:
+  waf-network:
+    driver: bridge

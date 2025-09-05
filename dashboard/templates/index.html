@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAF Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            max-width: 1200px;
+            margin: auto;
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #0056b3;
+            text-align: center;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        .stat-box {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            flex: 1;
+            margin: 0 10px;
+        }
+        .stat-box h2 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .stat-box p {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .action-link {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .action-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+    <meta http-equiv="refresh" content="5"> <!-- Refresh every 5 seconds -->
+</head>
+<body>
+    <div class="container">
+        <h1>WAF 实时监控面板</h1>
+        <div class="stats">
+            <div class="stat-box">
+                <h2>唯一访问者 (IP)</h2>
+                <p>{{ unique_ips }}</p>
+            </div>
+            <div class="stat-box">
+                <h2>近 24 小时访问数</h2>
+                <p>{{ total_requests_24h }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>本地 Docker 容器</h2>
+        {% if containers %}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名称</th>
+                    <th>状态</th>
+                    <th>镜像</th>
+                    <th>端口</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for container in containers %}
+                <tr>
+                    <td>{{ container.id }}</td>
+                    <td>{{ container.name }}</td>
+                    <td>{{ container.status }}</td>
+                    <td>{{ container.image }}</td>
+                    <td>{{ container.ports }}</td>
+                    <td><a href="{{ url_for('configure_waf', container_name=container.name) }}" class="action-link">配置 WAF</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>未找到运行中的 Docker 容器。</p>
+        {% endif %}
+    </div>
+</body>
+</html>
