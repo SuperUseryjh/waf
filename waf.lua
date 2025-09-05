@@ -40,7 +40,6 @@ local function log_access_data()
     end
 
     local remote_addr = ngx.var.remote_addr
-    local current_time = ngx.now()
 
     -- Log unique visitors (IPs)
     local ok, err = red:sadd("unique_ips", remote_addr)
@@ -59,6 +58,50 @@ local function log_access_data()
     end
 
     red:close()
+end
+
+-- Timer function to snapshot historical data
+local function snapshot_history(premature)
+    local red = get_redis_client()
+    if not red then
+        return
+    end
+
+    local current_time = ngx.now()
+    local timestamp = math.floor(current_time)
+
+    -- Snapshot unique IPs
+    local unique_ips_count, err = red:scard("unique_ips")
+    if unique_ips_count then
+        red:lpush("unique_ips_history", timestamp .. ":" .. unique_ips_count)
+        red:ltrim("unique_ips_history", 0, 1439) -- Keep last 24 hours (1440 minutes)
+    else
+        ngx.log(ngx.ERR, "failed to get unique_ips count: ", err)
+    end
+
+    -- Snapshot total requests for 24h
+    local total_requests_count_str, err = red:get("total_requests_24h")
+    local total_requests_count = tonumber(total_requests_count_str) or 0
+    if total_requests_count_str then
+        red:lpush("total_requests_24h_history", timestamp .. ":" .. total_requests_count)
+        red:ltrim("total_requests_24h_history", 0, 1439) -- Keep last 24 hours (1440 minutes)
+    else
+        ngx.log(ngx.ERR, "failed to get total_requests_24h: ", err)
+    end
+
+    red:close()
+
+    -- Reschedule the timer for the next minute
+    local ok, err = ngx.timer.at(60, snapshot_history)
+    if not ok then
+        ngx.log(ngx.ERR, "failed to schedule snapshot_history: ", err)
+    end
+end
+
+-- Schedule the first timer call if not already scheduled
+local ok, err = ngx.timer.at(0, snapshot_history)
+if not ok then
+    ngx.log(ngx.ERR, "failed to schedule initial snapshot_history: ", err)
 end
 
 local function check_blacklist_ip()

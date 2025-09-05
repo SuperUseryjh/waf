@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WAF Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -67,6 +68,10 @@
         .action-link:hover {
             text-decoration: underline;
         }
+        .chart-container {
+            width: 100%;
+            margin-top: 30px;
+        }
     </style>
     <meta http-equiv="refresh" content="5"> <!-- Refresh every 5 seconds -->
 </head>
@@ -82,6 +87,16 @@
                 <h2>近 24 小时访问数</h2>
                 <p>{{ total_requests_24h }}</p>
             </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>唯一访问者趋势 (近 24 小时)</h2>
+            <canvas id="uniqueIpsChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>总访问数趋势 (近 24 小时)</h2>
+            <canvas id="totalRequestsChart"></canvas>
         </div>
     </div>
 
@@ -116,5 +131,55 @@
         <p>未找到运行中的 Docker 容器。</p>
         {% endif %}
     </div>
+
+    <script>
+        // Unique IPs Chart
+        const uniqueIpsCtx = document.getElementById('uniqueIpsChart').getContext('2d');
+        new Chart(uniqueIpsCtx, {
+            type: 'line',
+            data: {
+                labels: {{ unique_ips_labels | tojson }},
+                datasets: [{
+                    label: '唯一访问者',
+                    data: {{ unique_ips_data | tojson }},
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Total Requests Chart
+        const totalRequestsCtx = document.getElementById('totalRequestsChart').getContext('2d');
+        new Chart(totalRequestsCtx, {
+            type: 'line',
+            data: {
+                labels: {{ total_requests_labels | tojson }},
+                datasets: [{
+                    label: '总访问数',
+                    data: {{ total_requests_data | tojson }},
+                    borderColor: 'rgb(255, 99, 132)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>

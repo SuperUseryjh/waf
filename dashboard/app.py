@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 import redis
 import docker
+import time
 
 app = Flask(__name__)
 
@@ -42,10 +43,32 @@ def index():
         except Exception as e:
             print(f"Error listing Docker containers: {e}")
 
+    # Fetch historical data for charts
+    unique_ips_history_raw = redis_client.lrange('unique_ips_history', 0, -1)
+    total_requests_24h_history_raw = redis_client.lrange('total_requests_24h_history', 0, -1)
+
+    unique_ips_labels = []
+    unique_ips_data = []
+    for entry in reversed(unique_ips_history_raw): # Display in chronological order
+        timestamp, count = entry.decode('utf-8').split(':')
+        unique_ips_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        unique_ips_data.append(int(count))
+
+    total_requests_labels = []
+    total_requests_data = []
+    for entry in reversed(total_requests_24h_history_raw): # Display in chronological order
+        timestamp, count = entry.decode('utf-8').split(':')
+        total_requests_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        total_requests_data.append(int(count))
+
     return render_template('index.html', 
                            unique_ips=unique_ips, 
                            total_requests_24h=total_requests_24h,
-                           containers=containers_data)
+                           containers=containers_data,
+                           unique_ips_labels=unique_ips_labels,
+                           unique_ips_data=unique_ips_data,
+                           total_requests_labels=total_requests_labels,
+                           total_requests_data=total_requests_data)
 
 # Placeholder for WAF rule configuration (will be implemented in Phase 2)
 @app.route('/configure_waf/<container_name>', methods=['GET', 'POST'])
