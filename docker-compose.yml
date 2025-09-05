@@ -23,6 +23,9 @@ services:
       - "5000:5000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    privileged: true
     depends_on:
       - redis
     networks:
