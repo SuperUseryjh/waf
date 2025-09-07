@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WAF 监控面板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         :root {
             --primary-color: #4a90e2;
@@ -119,6 +120,19 @@
             margin-left: 15px;
             font-size: 1.1em;
         }
+        .sidebar ul li a i { /* New style for icons */
+            font-size: 1.2em;
+            width: 20px; /* Fixed width for alignment */
+            text-align: center;
+        }
+        .sidebar.collapsed ul li a {
+            justify-content: center; /* Center icon when collapsed */
+            padding: 12px 0; /* Adjust padding for collapsed state */
+        }
+        .sidebar.collapsed ul li a i {
+            margin-left: 0; /* Remove margin when collapsed */
+        }
+
 
         .main-content {
             flex-grow: 1;
@@ -279,9 +293,9 @@
     <div class="sidebar" id="sidebar">
         <h2>WAF Dashboard</h2>
         <ul>
-            <li><a href="#" class="active" onclick="showPanel('waf-monitor')"><span>WAF 监控</span></a></li>
-            <li><a href="#" onclick="showPanel('system-monitor')"><span>系统资源监控</span></a></li>
-            <li><a href="#" onclick="showPanel('docker-containers')"><span>Docker 容器</span></a></li>
+            <li><a href="#" class="active" onclick="showPanel('waf-monitor')"><i class="fas fa-shield-alt"></i><span>WAF 监控</span></a></li>
+            <li><a href="#" onclick="showPanel('system-monitor')"><i class="fas fa-server"></i><span>系统资源监控</span></a></li>
+            <li><a href="#" onclick="showPanel('docker-containers')"><i class="fab fa-docker"></i><span>Docker 容器</span></a></li>
         </ul>
         <button class="toggle-btn" onclick="toggleSidebar()"></button>
     </div>
