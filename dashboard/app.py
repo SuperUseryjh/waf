@@ -53,7 +53,7 @@ def collect_system_metrics():
         print(f"Error collecting system metrics: {e}")
     finally:
         # Schedule next collection in 60 seconds
-        threading.Timer(60, collect_system_metrics).start()
+        threading.Timer(10, collect_system_metrics).start()
 
 # Start the system metrics collection thread
 # We need to ensure this runs only once when the app starts
@@ -162,6 +162,55 @@ def index():
                            network_labels=network_labels,
                            network_sent_data=network_sent_data,
                            network_recv_data=network_recv_data)
+
+@app.route('/api/metrics')
+def get_metrics():
+    cpu_history_raw = redis_client.lrange('cpu_history', 0, -1)
+    memory_history_raw = redis_client.lrange('memory_history', 0, -1)
+    disk_history_raw = redis_client.lrange('disk_history', 0, -1)
+    network_history_raw = redis_client.lrange('network_history', 0, -1)
+
+    cpu_labels = []
+    cpu_data = []
+    for entry in reversed(cpu_history_raw):
+        timestamp, percent = entry.decode('utf-8').split(':')
+        cpu_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        cpu_data.append(float(percent))
+
+    memory_labels = []
+    memory_data = []
+    for entry in reversed(memory_history_raw):
+        timestamp, percent = entry.decode('utf-8').split(':')
+        memory_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        memory_data.append(float(percent))
+
+    disk_labels = []
+    disk_data = []
+    for entry in reversed(disk_history_raw):
+        timestamp, percent = entry.decode('utf-8').split(':')
+        disk_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        disk_data.append(float(percent))
+
+    network_labels = []
+    network_sent_data = []
+    network_recv_data = []
+    for entry in reversed(network_history_raw):
+        timestamp, sent, recv = entry.decode('utf-8').split(':')
+        network_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        network_sent_data.append(int(sent))
+        network_recv_data.append(int(recv))
+
+    return jsonify({
+        'cpu_labels': cpu_labels,
+        'cpu_data': cpu_data,
+        'memory_labels': memory_labels,
+        'memory_data': memory_data,
+        'disk_labels': disk_labels,
+        'disk_data': disk_data,
+        'network_labels': network_labels,
+        'network_sent_data': network_sent_data,
+        'network_recv_data': network_recv_data
+    })
 
 # Placeholder for WAF rule configuration (will be implemented in Phase 2)
 @app.route('/configure_waf/<container_name>', methods=['GET', 'POST'])

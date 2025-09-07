@@ -273,7 +273,7 @@
 
         // WAF Charts
         const uniqueIpsCtx = document.getElementById('uniqueIpsChart').getContext('2d');
-        new Chart(uniqueIpsCtx, {
+        const uniqueIpsChart = new Chart(uniqueIpsCtx, {
             type: 'line',
             data: {
                 labels: {{ unique_ips_labels | tojson }},
@@ -296,7 +296,7 @@
         });
 
         const totalRequestsCtx = document.getElementById('totalRequestsChart').getContext('2d');
-        new Chart(totalRequestsCtx, {
+        const totalRequestsChart = new Chart(totalRequestsCtx, {
             type: 'line',
             data: {
                 labels: {{ total_requests_labels | tojson }},
@@ -320,7 +320,7 @@
 
         // System Metrics Charts
         const cpuCtx = document.getElementById('cpuChart').getContext('2d');
-        new Chart(cpuCtx, {
+        const cpuChart = new Chart(cpuCtx, {
             type: 'line',
             data: {
                 labels: {{ cpu_labels | tojson }},
@@ -344,7 +344,7 @@
         });
 
         const memoryCtx = document.getElementById('memoryChart').getContext('2d');
-        new Chart(memoryCtx, {
+        const memoryChart = new Chart(memoryCtx, {
             type: 'line',
             data: {
                 labels: {{ memory_labels | tojson }},
@@ -368,7 +368,7 @@
         });
 
         const diskCtx = document.getElementById('diskChart').getContext('2d');
-        new Chart(diskCtx, {
+        const diskChart = new Chart(diskCtx, {
             type: 'line',
             data: {
                 labels: {{ disk_labels | tojson }},
@@ -392,7 +392,7 @@
         });
 
         const networkCtx = document.getElementById('networkChart').getContext('2d');
-        new Chart(networkCtx, {
+        const networkChart = new Chart(networkCtx, {
             type: 'line',
             data: {
                 labels: {{ network_labels | tojson }},
@@ -405,7 +405,7 @@
                         fill: false
                     },
                     {
-                        label: '接收字节数',
+                        label: '接收���节数',
                         data: {{ network_recv_data | tojson }},
                         borderColor: 'rgb(0, 204, 102)',
                         tension: 0.1,
@@ -439,6 +439,41 @@
                 }
             }
         });
+
+        // Function to update charts
+        async function updateCharts() {
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+
+                // Update CPU Chart
+                cpuChart.data.labels = data.cpu_labels;
+                cpuChart.data.datasets[0].data = data.cpu_data;
+                cpuChart.update();
+
+                // Update Memory Chart
+                memoryChart.data.labels = data.memory_labels;
+                memoryChart.data.datasets[0].data = data.memory_data;
+                memoryChart.update();
+
+                // Update Disk Chart
+                diskChart.data.labels = data.disk_labels;
+                diskChart.data.datasets[0].data = data.disk_data;
+                diskChart.update();
+
+                // Update Network Chart
+                networkChart.data.labels = data.network_labels;
+                networkChart.data.datasets[0].data = data.network_sent_data;
+                networkChart.data.datasets[1].data = data.network_recv_data;
+                networkChart.update();
+
+            } catch (error) {
+                console.error('Error fetching metrics:', error);
+            }
+        }
+
+        // Update charts every 10 seconds
+        setInterval(updateCharts, 10000);
     </script>
 </body>
 </html>
