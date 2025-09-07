@@ -288,6 +288,83 @@
             }
         }
     </style>
+    <style>
+        .form-container {
+            background-color: var(--background-light);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        .form-container h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--text-color-dark);
+        }
+        .form-group input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        .form-group small {
+            color: #666;
+            font-size: 0.85em;
+            margin-top: 5px;
+            display: block;
+        }
+        .action-button {
+            background-color: var(--primary-color);
+            color: var(--text-color-light);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 10px;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .action-button:hover {
+            background-color: #3a7bd5;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .action-button.secondary {
+            background-color: #6c757d;
+        }
+        .action-button.secondary:hover {
+            background-color: #5a6268;
+        }
+        .message-box {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: 500;
+            text-align: center;
+        }
+        .message-box.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message-box.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
 </head>
 <body>
     <div class="sidebar" id="sidebar">
@@ -352,6 +429,29 @@
         <div id="docker-containers" class="panel hidden">
             <div class="container">
                 <h2>本地 Docker 容器</h2>
+                <button class="action-button" onclick="showCreateContainerForm()"><i class="fas fa-plus-circle"></i> 创建新容器</button>
+                <div id="create-container-form" class="hidden form-container">
+                    <h3>创建 Docker 容器</h3>
+                    <form id="containerCreateForm">
+                        <div class="form-group">
+                            <label for="imageName">镜像名称:</label>
+                            <input type="text" id="imageName" name="imageName" required placeholder="例如: nginx:latest">
+                        </div>
+                        <div class="form-group">
+                            <label for="containerName">容器名称 (可选):</label>
+                            <input type="text" id="containerName" name="containerName" placeholder="例如: my-nginx-app">
+                        </div>
+                        <div class="form-group">
+                            <label for="portMappings">端口映射 (可选):</label>
+                            <input type="text" id="portMappings" name="portMappings" placeholder="例如: 80:8080,443:8443 (宿主端口:容器端口)">
+                            <small>多个映射请用逗号分隔。</small>
+                        </div>
+                        <button type="submit" class="action-button primary"><i class="fas fa-play"></i> 创建容器</button>
+                        <button type="button" class="action-button secondary" onclick="hideCreateContainerForm()"><i class="fas fa-times"></i> 取消</button>
+                    </form>
+                    <div id="createContainerMessage" class="message-box"></div>
+                </div>
+
                 {% if containers %}
                 <table>
                     <thead>
@@ -364,7 +464,7 @@
                             <th>操作</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="dockerContainersTableBody">
                         {% for container in containers %}
                         <tr>
                             <td>{{ container.id }}</td>
@@ -378,7 +478,7 @@
                     </tbody>
                 </table>
                 {% else %}
-                <p>未找到运行中的 Docker 容器。</p>
+                <p id="noContainersMessage">未找到运行中的 Docker 容器。</p>
                 {% endif %}
             </div>
         </div>
@@ -608,6 +708,87 @@
 
         // Update charts every 10 seconds
         setInterval(updateCharts, 10000);
+
+        // Docker Container Management
+        function showCreateContainerForm() {
+            document.getElementById('create-container-form').classList.remove('hidden');
+            document.getElementById('createContainerMessage').innerHTML = ''; // Clear previous messages
+        }
+
+        function hideCreateContainerForm() {
+            document.getElementById('create-container-form').classList.add('hidden');
+            document.getElementById('containerCreateForm').reset(); // Clear form fields
+        }
+
+        async function refreshDockerContainers() {
+            try {
+                const response = await fetch('/'); // Fetch the entire page to get updated containers
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const newTableBody = doc.getElementById('dockerContainersTableBody');
+                const oldTableBody = document.getElementById('dockerContainersTableBody');
+                const noContainersMessage = document.getElementById('noContainersMessage');
+
+                if (newTableBody && oldTableBody) {
+                    oldTableBody.innerHTML = newTableBody.innerHTML;
+                    // Update the "No containers" message visibility
+                    if (newTableBody.children.length > 0) {
+                        if (noContainersMessage) noContainersMessage.classList.add('hidden');
+                    } else {
+                        if (noContainersMessage) noContainersMessage.classList.remove('hidden');
+                    }
+                } else if (noContainersMessage) {
+                    // If no containers were found at all, ensure the message is visible
+                    noContainersMessage.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                console.error('Error refreshing Docker containers:', error);
+            }
+        }
+
+        document.getElementById('containerCreateForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const messageBox = document.getElementById('createContainerMessage');
+            messageBox.innerHTML = '';
+            messageBox.className = 'message-box'; // Reset classes
+
+            const imageName = document.getElementById('imageName').value;
+            const containerName = document.getElementById('containerName').value;
+            const portMappings = document.getElementById('portMappings').value;
+
+            try {
+                const response = await fetch('/api/containers/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_name: imageName,
+                        container_name: containerName,
+                        port_mappings: portMappings
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    messageBox.classList.add('success');
+                    messageBox.innerHTML = `<i class="fas fa-check-circle"></i> ${result.message}`;
+                    document.getElementById('containerCreateForm').reset();
+                    hideCreateContainerForm(); // Hide form on success
+                    refreshDockerContainers(); // Refresh the list of containers
+                } else {
+                    messageBox.classList.add('error');
+                    messageBox.innerHTML = `<i class="fas fa-times-circle"></i> ${result.message}`;
+                }
+            } catch (error) {
+                messageBox.classList.add('error');
+                messageBox.innerHTML = `<i class="fas fa-exclamation-circle"></i> 创建容器时发生错误: ${error.message}`;
+                console.error('Error creating container:', error);
+            }
+        });
     </script>
 </body>
 </html>

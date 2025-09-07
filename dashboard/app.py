@@ -212,6 +212,44 @@ def get_metrics():
         'network_recv_data': network_recv_data
     })
 
+@app.route('/api/containers/create', methods=['POST'])
+def create_container():
+    if not docker_client:
+        return jsonify({'success': False, 'message': 'Docker daemon not connected.'}), 500
+
+    data = request.get_json()
+    image_name = data.get('image_name')
+    container_name = data.get('container_name')
+    port_mappings_str = data.get('port_mappings', '') # e.g., "80:8080,443:8443"
+
+    if not image_name:
+        return jsonify({'success': False, 'message': 'Image name is required.'}), 400
+
+    ports = {}
+    if port_mappings_str:
+        for mapping in port_mappings_str.split(','):
+            if ':' in mapping:
+                host_port, container_port = mapping.split(':')
+                ports[f'{container_port}/tcp'] = int(host_port)
+            else:
+                # If only container port is provided, expose it without host mapping
+                ports[f'{mapping}/tcp'] = None
+
+    try:
+        container = docker_client.containers.run(
+            image_name,
+            name=container_name,
+            ports=ports,
+            detach=True # Run in background
+        )
+        return jsonify({'success': True, 'message': f'Container {container.name} created successfully.'})
+    except docker.errors.ImageNotFound:
+        return jsonify({'success': False, 'message': f'Image "{image_name}" not found.'}), 404
+    except docker.errors.APIError as e:
+        return jsonify({'success': False, 'message': f'Docker API error: {e}'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An unexpected error occurred: {e}'}), 500
+
 # Placeholder for WAF rule configuration (will be implemented in Phase 2)
 @app.route('/configure_waf/<container_name>', methods=['GET', 'POST'])
 def configure_waf(container_name):
