@@ -31,7 +31,7 @@ then
     fi
 fi
 
-echo "Docker ���安装。"
+echo "Docker 已安装。"
 
 # --- 检查 Docker Compose 是否安装 ---
 if ! command -v docker-compose &> /dev/null
