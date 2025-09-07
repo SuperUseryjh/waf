@@ -6,152 +6,272 @@
     <title>WAF 监控面板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            background-color: #f4f4f4;
-            color: #333;
-            display: flex;
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #50e3c2;
+            --background-light: #f0f2f5;
+            --background-dark: #2c3e50;
+            --text-color-dark: #333;
+            --text-color-light: #ecf0f1;
+            --card-background: #ffffff;
+            --border-color: #e0e0e0;
+            --shadow-light: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.12);
+            --font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         }
+
+        body {
+            font-family: var(--font-family);
+            margin: 0;
+            background-color: var(--background-light);
+            color: var(--text-color-dark);
+            display: flex;
+            min-height: 100vh;
+        }
+
         .sidebar {
-            width: 200px;
-            background-color: #2c3e50;
-            color: #ecf0f1;
-            padding: 20px;
+            width: 220px;
+            background-color: var(--background-dark);
+            color: var(--text-color-light);
+            padding: 20px 0;
             height: 100vh;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            position: fixed; /* 固定位置 */
+            box-shadow: var(--shadow-light);
+            position: fixed;
             left: 0;
             top: 0;
-            transition: width 0.3s ease; /* 添加过渡效果 */
-            overflow-x: hidden; /* 隐藏溢出内容 */
+            transition: width 0.3s ease, box-shadow 0.3s ease;
+            overflow-x: hidden;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
         }
         .sidebar.collapsed {
-            width: 60px; /* 收起时的宽度 */
+            width: 70px;
         }
         .sidebar.collapsed h2, .sidebar.collapsed ul li a span {
-            display: none; /* 收起时隐藏文本 */
+            display: none;
         }
         .sidebar.collapsed .toggle-btn {
             text-align: center;
         }
         .sidebar.collapsed .toggle-btn::before {
-            content: '>'; /* 收起时显示向右箭头 */
+            content: '\25B6'; /* Right arrow */
         }
         .toggle-btn {
-            background-color: #34495e;
-            color: #ecf0f1;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--text-color-light);
             border: none;
-            padding: 10px;
+            padding: 15px 20px;
             width: 100%;
             text-align: right;
             cursor: pointer;
             font-size: 1.2em;
-            position: absolute;
+            position: sticky; /* Make it stick to the bottom */
             bottom: 0;
             left: 0;
+            transition: background-color 0.3s ease;
+        }
+        .toggle-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
         }
         .toggle-btn::before {
-            content: '<'; /* 展开时显示向左箭头 */
+            content: '\25C0'; /* Left arrow */
         }
-        .main-content {
-            flex-grow: 1;
-            padding: 20px;
-            margin-left: 200px; /* 初始时为侧边栏宽度 */
-            transition: margin-left 0.3s ease; /* 添加过渡效果 */
-        }
-        .main-content.collapsed {
-            margin-left: 60px; /* 侧边栏收起时的左边距 */
-        }
+
         .sidebar h2 {
-            color: #ecf0f1;
+            color: var(--text-color-light);
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
+            font-size: 1.8em;
+            font-weight: 600;
+            padding: 0 20px;
         }
         .sidebar ul {
             list-style: none;
             padding: 0;
+            flex-grow: 1; /* Allow menu to grow */
         }
         .sidebar ul li {
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .sidebar ul li a {
-            color: #ecf0f1;
+            color: var(--text-color-light);
             text-decoration: none;
-            padding: 10px 15px;
-            display: block;
-            border-radius: 5px;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            border-radius: 6px;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
-        .sidebar ul li a:hover,
+        .sidebar ul li a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: var(--secondary-color);
+        }
         .sidebar ul li a.active {
-            background-color: #34495e;
+            background-color: var(--primary-color);
+            color: var(--text-color-light);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
+        .sidebar ul li a.active:hover {
+            background-color: var(--primary-color); /* Keep active color on hover */
+        }
+        .sidebar ul li a span {
+            margin-left: 15px;
+            font-size: 1.1em;
+        }
+
         .main-content {
             flex-grow: 1;
-            padding: 20px;
+            padding: 30px;
+            margin-left: 220px;
+            transition: margin-left 0.3s ease;
         }
+        .main-content.collapsed {
+            margin-left: 70px;
+        }
+
         .container {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            max-width: 1200px;
+            background-color: var(--card-background);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-light);
+            max-width: 1400px;
             margin: auto;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            transition: box-shadow 0.3s ease;
         }
+        .container:hover {
+            box-shadow: var(--shadow-hover);
+        }
+
         h1, h2 {
-            color: #0056b3;
-            text-align: center;
+            color: var(--primary-color);
+            text-align: left; /* Align titles to left */
+            margin-bottom: 20px;
+            font-weight: 600;
         }
-        .stats {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 30px;
+        h1 {
+            font-size: 2.2em;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 15px;
             margin-bottom: 30px;
         }
+        h2 {
+            font-size: 1.6em;
+        }
+
+        .stats {
+            display: grid; /* Use grid for better control */
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px; /* Gap between stat boxes */
+            margin-top: 30px;
+            margin-bottom: 40px;
+        }
         .stat-box {
-            background-color: #e9ecef;
-            padding: 15px;
-            border-radius: 5px;
+            background-color: var(--background-light);
+            padding: 25px;
+            border-radius: 10px;
             text-align: center;
-            flex: 1;
-            margin: 0 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .stat-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
         }
         .stat-box h2 {
             margin-top: 0;
-            color: #007bff;
+            color: var(--primary-color);
+            font-size: 1.3em;
+            margin-bottom: 10px;
         }
         .stat-box p {
-            font-size: 2em;
-            font-weight: bold;
-            color: #333;
+            font-size: 2.5em;
+            font-weight: 700;
+            color: var(--text-color-dark);
+            margin: 0;
         }
+
         table {
             width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
+            border-collapse: separate; /* Use separate for rounded corners */
+            border-spacing: 0;
+            margin-top: 25px;
+            border-radius: 8px;
+            overflow: hidden; /* Ensures rounded corners apply */
+            box-shadow: var(--shadow-light);
         }
         th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
+            border: 1px solid var(--border-color);
+            padding: 12px 15px;
             text-align: left;
         }
         th {
-            background-color: #f2f2f2;
+            background-color: var(--primary-color);
+            color: var(--text-color-light);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
         }
+        tr:nth-child(even) {
+            background-color: #f8f8f8;
+        }
+        tr:hover {
+            background-color: #f0f0f0;
+        }
+
         .action-link {
-            color: #007bff;
+            color: var(--primary-color);
             text-decoration: none;
+            font-weight: 500;
         }
         .action-link:hover {
             text-decoration: underline;
         }
+
         .chart-container {
             width: 100%;
-            margin-top: 30px;
+            margin-top: 40px;
+            padding: 20px;
+            background-color: var(--card-background);
+            border-radius: 12px;
+            box-shadow: var(--shadow-light);
         }
+        .chart-container h2 {
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
         .hidden {
             display: none;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+                padding: 15px 0;
+            }
+            .sidebar h2, .sidebar ul li a span {
+                display: none;
+            }
+            .sidebar .toggle-btn {
+                text-align: center;
+            }
+            .sidebar .toggle-btn::before {
+                content: '\25B6';
+            }
+            .main-content {
+                margin-left: 70px;
+                padding: 15px;
+            }
+            .stats {
+                grid-template-columns: 1fr; /* Stack stats on small screens */
+            }
+            .stat-box {
+                margin: 0;
+            }
         }
     </style>
 </head>
