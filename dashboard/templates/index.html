@@ -461,6 +461,8 @@
                             <th>状态</th>
                             <th>镜像</th>
                             <th>端口</th>
+                            <th>CPU 使用率</th>
+                            <th>内存使用率</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -472,7 +474,16 @@
                             <td>{{ container.status }}</td>
                             <td>{{ container.image }}</td>
                             <td>{{ container.ports }}</td>
-                            <td><a href="{{ url_for('configure_waf', container_name=container.name) }}" class="action-link">配置 WAF</a></td>
+                            <td>{{ container.cpu_usage }}</td>
+                            <td>{{ container.memory_usage }}</td>
+                            <td>
+                                <button class="action-button" onclick="manageContainer('{{ container.id }}', 'start')" {% if container.status == 'running' %}disabled{% endif %}><i class="fas fa-play"></i> 启动</button>
+                                <button class="action-button secondary" onclick="manageContainer('{{ container.id }}', 'stop')" {% if container.status != 'running' %}disabled{% endif %}><i class="fas fa-stop"></i> 停止</button>
+                                <button class="action-button" onclick="manageContainer('{{ container.id }}', 'restart')"><i class="fas fa-sync-alt"></i> 重启</button>
+                                <button class="action-button secondary" onclick="removeContainer('{{ container.id }}', '{{ container.name }}')"><i class="fas fa-trash-alt"></i> 删除</button>
+                                <button class="action-button" onclick="showContainerDetails('{{ container.id }}', '{{ container.name }}')"><i class="fas fa-chart-line"></i> 查看详情</button>
+                                <a href="{{ url_for('configure_waf', container_name=container.name) }}" class="action-link">配置 WAF</a>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -789,6 +800,205 @@
                 console.error('Error creating container:', error);
             }
         });
+
+        // Utility function to show notifications
+        function showNotification(message, type) {
+            const notificationArea = document.createElement('div');
+            notificationArea.className = `message-box ${type}`;
+            notificationArea.innerHTML = message;
+            document.querySelector('.main-content').prepend(notificationArea); // Add to top of main content
+
+            setTimeout(() => {
+                notificationArea.remove();
+            }, 5000); // Remove after 5 seconds
+        }
+
+        // Docker Container Management Actions
+        async function manageContainer(containerId, action) {
+            try {
+                const response = await fetch(`/api/containers/${containerId}/${action}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showNotification(`<i class="fas fa-check-circle"></i> ${result.message}`, 'success');
+                    refreshDockerContainers();
+                } else {
+                    showNotification(`<i class="fas fa-times-circle"></i> ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification(`<i class="fas fa-exclamation-circle"></i> 执行 ${action} 操作时发生错误: ${error.message}`, 'error');
+                console.error(`Error performing ${action} on container ${containerId}:`, error);
+            }
+        }
+
+        async function removeContainer(containerId, containerName) {
+            if (confirm(`确定要删除容器 ${containerName} (${containerId}) 吗���此操作不可逆！`)) {
+                try {
+                    const response = await fetch(`/api/containers/${containerId}/remove`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showNotification(`<i class="fas fa-check-circle"></i> ${result.message}`, 'success');
+                        refreshDockerContainers();
+                    } else {
+                        showNotification(`<i class="fas fa-times-circle"></i> ${result.message}`, 'error');
+                    }
+                } catch (error) {
+                    showNotification(`<i class="fas fa-exclamation-circle"></i> 删除容器时发生错误: ${error.message}`, 'error');
+                    console.error(`Error removing container ${containerId}:`, error);
+                }
+            }
+        }
+    // Container Details Modal
+        const containerDetailModal = document.createElement('div');
+        containerDetailModal.id = 'containerDetailModal';
+        containerDetailModal.className = 'modal hidden';
+        containerDetailModal.innerHTML = `
+            <div class="modal-content">
+                <span class="close-button" onclick="closeModal()">&times;</span>
+                <h2 id="containerDetailTitle"></h2>
+                <div class="chart-container">
+                    <h3>CPU 使用率 (近 1 小时)</h3>
+                    <canvas id="containerCpuChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>内存使用率 (近 1 小时)</h3>
+                    <canvas id="containerMemoryChart"></canvas>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(containerDetailModal);
+
+        let containerCpuChartInstance = null;
+        let containerMemoryChartInstance = null;
+
+        async function showContainerDetails(containerId, containerName) {
+            document.getElementById('containerDetailTitle').innerText = `容器详情: ${containerName} (${containerId})`;
+            containerDetailModal.classList.remove('hidden');
+
+            // Destroy existing chart instances if they exist
+            if (containerCpuChartInstance) containerCpuChartInstance.destroy();
+            if (containerMemoryChartInstance) containerMemoryChartInstance.destroy();
+
+            try {
+                const response = await fetch(`/api/containers/${containerId}/metrics`);
+                const data = await response.json();
+
+                const containerCpuCtx = document.getElementById('containerCpuChart').getContext('2d');
+                containerCpuChartInstance = new Chart(containerCpuCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.cpu_labels,
+                        datasets: [{
+                            label: 'CPU 使用率 (%)',
+                            data: data.cpu_data,
+                            borderColor: 'rgb(54, 162, 235)',
+                            tension: 0.1,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+
+                const containerMemoryCtx = document.getElementById('containerMemoryChart').getContext('2d');
+                containerMemoryChartInstance = new Chart(containerMemoryCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.memory_labels,
+                        datasets: [{
+                            label: '内存使用率 (%)',
+                            data: data.memory_data,
+                            borderColor: 'rgb(255, 206, 86)',
+                            tension: 0.1,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                showNotification(`<i class="fas fa-exclamation-circle"></i> 获取容器指标时发生错误: ${error.message}`, 'error');
+                console.error(`Error fetching container metrics for ${containerId}:`, error);
+            }
+        }
+
+        function closeModal() {
+            containerDetailModal.classList.add('hidden');
+        }
+
+        // Add modal specific styles
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .modal {
+                display: none; /* Hidden by default */
+                position: fixed; /* Stay in place */
+                z-index: 1000; /* Sit on top */
+                left: 0;
+                top: 0;
+                width: 100%; /* Full width */
+                height: 100%; /* Full height */
+                overflow: auto; /* Enable scroll if needed */
+                background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+                padding-top: 60px;
+            }
+            .modal.hidden {
+                display: none;
+            }
+            .modal-content {
+                background-color: var(--card-background);
+                margin: 5% auto; /* 15% from the top and centered */
+                padding: 30px;
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+                width: 80%; /* Could be more or less, depending on screen size */
+                max-width: 900px;
+                box-shadow: var(--shadow-light);
+                position: relative;
+            }
+            .close-button {
+                color: #aaa;
+                float: right;
+                font-size: 28px;
+                font-weight: bold;
+            }
+            .close-button:hover,
+            .close-button:focus {
+                color: var(--primary-color);
+                text-decoration: none;
+                cursor: pointer;
+            }
+            .modal .chart-container {
+                margin-top: 20px;
+                padding: 15px;
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>

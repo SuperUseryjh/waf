@@ -20,6 +20,7 @@ except Exception as e:
 
 # --- System Metrics Collection ---
 SYSTEM_METRICS_HISTORY_LENGTH = 1440 # 24 hours * 60 minutes
+CONTAINER_METRICS_HISTORY_LENGTH = 60 # 1 hour * 60 seconds
 
 def collect_system_metrics():
     try:
@@ -52,8 +53,49 @@ def collect_system_metrics():
     except Exception as e:
         print(f"Error collecting system metrics: {e}")
     finally:
-        # Schedule next collection in 60 seconds
+        # Schedule next collection in 10 seconds
         threading.Timer(10, collect_system_metrics).start()
+
+def collect_container_metrics():
+    if not docker_client:
+        threading.Timer(10, collect_container_metrics).start()
+        return
+
+    try:
+        timestamp = math.floor(time.time())
+        for container in docker_client.containers.list():
+            stats = container.stats(stream=False) # Get a single snapshot
+            
+            # CPU Usage Calculation (Docker SDK specific)
+            cpu_percent = 0.0
+            if 'cpu_stats' in stats and 'precpu_stats' in stats:
+                cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+                system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+                number_cpus = stats['cpu_stats']['system_cpu_usage'] # This is actually total_cpus, not system_cpu_usage
+                if number_cpus > 0 and system_delta > 0:
+                    cpu_percent = (cpu_delta / system_delta) * number_cpus * 100.0
+            
+            # Memory Usage Calculation
+            mem_usage = 0
+            mem_limit = 0
+            mem_percent = 0.0
+            if 'memory_stats' in stats:
+                mem_usage = stats['memory_stats'].get('usage', 0)
+                mem_limit = stats['memory_stats'].get('limit', 0)
+                if mem_limit > 0:
+                    mem_percent = (mem_usage / mem_limit) * 100.0
+
+            redis_client.lpush(f'container:{container.id}:cpu_history', f"{timestamp}:{cpu_percent:.2f}")
+            redis_client.ltrim(f'container:{container.id}:cpu_history', 0, CONTAINER_METRICS_HISTORY_LENGTH - 1)
+            
+            redis_client.lpush(f'container:{container.id}:memory_history', f"{timestamp}:{mem_percent:.2f}")
+            redis_client.ltrim(f'container:{container.id}:memory_history', 0, CONTAINER_METRICS_HISTORY_LENGTH - 1)
+
+    except Exception as e:
+        print(f"Error collecting container metrics: {e}")
+    finally:
+        # Schedule next collection in 10 seconds
+        threading.Timer(10, collect_container_metrics).start()
 
 # Start the system metrics collection thread
 # We need to ensure this runs only once when the app starts
@@ -61,6 +103,7 @@ def collect_system_metrics():
 # In production (without debug=True), it will run once.
 if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     threading.Timer(1, collect_system_metrics).start() # Start after 1 second
+    threading.Timer(1, collect_container_metrics).start() # Start after 1 second
 
 
 @app.route('/')
@@ -76,6 +119,26 @@ def index():
     if docker_client:
         try:
             for container in docker_client.containers.list():
+                # Fetch latest CPU and Memory usage from Redis
+                latest_cpu_raw = redis_client.lindex(f'container:{container.id}:cpu_history', 0)
+                latest_memory_raw = redis_client.lindex(f'container:{container.id}:memory_history', 0)
+
+                latest_cpu_usage = "N/A"
+                if latest_cpu_raw:
+                    try:
+                        latest_cpu_usage = float(latest_cpu_raw.decode('utf-8').split(':')[1])
+                        latest_cpu_usage = f"{latest_cpu_usage:.2f}%"
+                    except (ValueError, IndexError):
+                        pass
+
+                latest_memory_usage = "N/A"
+                if latest_memory_raw:
+                    try:
+                        latest_memory_usage = float(latest_memory_raw.decode('utf-8').split(':')[1])
+                        latest_memory_usage = f"{latest_memory_usage:.2f}%"
+                    except (ValueError, IndexError):
+                        pass
+
                 ports = []
                 for p_binding in container.ports.values():
                     if p_binding:
@@ -86,7 +149,9 @@ def index():
                     'name': container.name,
                     'status': container.status,
                     'image': container.image.tags[0] if container.image.tags else '<none>',
-                    'ports': ", ".join(ports) if ports else '-'
+                    'ports': ", ".join(ports) if ports else '-',
+                    'cpu_usage': latest_cpu_usage,
+                    'memory_usage': latest_memory_usage
                 })
         except Exception as e:
             print(f"Error listing Docker containers: {e}")
@@ -212,6 +277,32 @@ def get_metrics():
         'network_recv_data': network_recv_data
     })
 
+@app.route('/api/containers/<container_id>/metrics')
+def get_container_metrics(container_id):
+    cpu_history_raw = redis_client.lrange(f'container:{container_id}:cpu_history', 0, -1)
+    memory_history_raw = redis_client.lrange(f'container:{container_id}:memory_history', 0, -1)
+
+    cpu_labels = []
+    cpu_data = []
+    for entry in reversed(cpu_history_raw):
+        timestamp, percent = entry.decode('utf-8').split(':')
+        cpu_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        cpu_data.append(float(percent))
+
+    memory_labels = []
+    memory_data = []
+    for entry in reversed(memory_history_raw):
+        timestamp, percent = entry.decode('utf-8').split(':')
+        memory_labels.append(time.strftime('%H:%M', time.localtime(int(timestamp))))
+        memory_data.append(float(percent))
+
+    return jsonify({
+        'cpu_labels': cpu_labels,
+        'cpu_data': cpu_data,
+        'memory_labels': memory_labels,
+        'memory_data': memory_data
+    })
+
 @app.route('/api/containers/create', methods=['POST'])
 def create_container():
     if not docker_client:
@@ -245,6 +336,66 @@ def create_container():
         return jsonify({'success': True, 'message': f'Container {container.name} created successfully.'})
     except docker.errors.ImageNotFound:
         return jsonify({'success': False, 'message': f'Image "{image_name}" not found.'}), 404
+    except docker.errors.APIError as e:
+        return jsonify({'success': False, 'message': f'Docker API error: {e}'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An unexpected error occurred: {e}'}), 500
+
+@app.route('/api/containers/<container_id>/start', methods=['POST'])
+def start_container(container_id):
+    if not docker_client:
+        return jsonify({'success': False, 'message': 'Docker daemon not connected.'}), 500
+    try:
+        container = docker_client.containers.get(container_id)
+        container.start()
+        return jsonify({'success': True, 'message': f'Container {container.name} started successfully.'})
+    except docker.errors.NotFound:
+        return jsonify({'success': False, 'message': f'Container {container_id} not found.'}), 404
+    except docker.errors.APIError as e:
+        return jsonify({'success': False, 'message': f'Docker API error: {e}'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An unexpected error occurred: {e}'}), 500
+
+@app.route('/api/containers/<container_id>/stop', methods=['POST'])
+def stop_container(container_id):
+    if not docker_client:
+        return jsonify({'success': False, 'message': 'Docker daemon not connected.'}), 500
+    try:
+        container = docker_client.containers.get(container_id)
+        container.stop()
+        return jsonify({'success': True, 'message': f'Container {container.name} stopped successfully.'})
+    except docker.errors.NotFound:
+        return jsonify({'success': False, 'message': f'Container {container_id} not found.'}), 404
+    except docker.errors.APIError as e:
+        return jsonify({'success': False, 'message': f'Docker API error: {e}'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An unexpected error occurred: {e}'}), 500
+
+@app.route('/api/containers/<container_id>/restart', methods=['POST'])
+def restart_container(container_id):
+    if not docker_client:
+        return jsonify({'success': False, 'message': 'Docker daemon not connected.'}), 500
+    try:
+        container = docker_client.containers.get(container_id)
+        container.restart()
+        return jsonify({'success': True, 'message': f'Container {container.name} restarted successfully.'})
+    except docker.errors.NotFound:
+        return jsonify({'success': False, 'message': f'Container {container_id} not found.'}), 404
+    except docker.errors.APIError as e:
+        return jsonify({'success': False, 'message': f'Docker API error: {e}'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An unexpected error occurred: {e}'}), 500
+
+@app.route('/api/containers/<container_id>/remove', methods=['DELETE'])
+def remove_container(container_id):
+    if not docker_client:
+        return jsonify({'success': False, 'message': 'Docker daemon not connected.'}), 500
+    try:
+        container = docker_client.containers.get(container_id)
+        container.remove()
+        return jsonify({'success': True, 'message': f'Container {container.name} removed successfully.'})
+    except docker.errors.NotFound:
+        return jsonify({'success': False, 'message': f'Container {container_id} not found.'}), 404
     except docker.errors.APIError as e:
         return jsonify({'success': False, 'message': f'Docker API error: {e}'}), 500
     except Exception as e:
