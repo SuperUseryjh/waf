@@ -5,6 +5,7 @@ import time
 import psutil
 import threading
 import math
+import os
 
 app = Flask(__name__)
 
@@ -17,6 +18,14 @@ try:
 except Exception as e:
     print(f"Error connecting to Docker daemon: {e}")
     docker_client = None
+
+# Configure psutil to read from host's /proc and /sys if mounted
+if os.path.exists('/host/proc') and os.path.exists('/host/sys'):
+    psutil.PROCFS_PATH = '/host/proc'
+    psutil.SYSFS_PATH = '/host/sys'
+    print("psutil configured to read host system metrics.")
+else:
+    print("psutil reading container system metrics (host /proc and /sys not found at /host).")
 
 # --- System Metrics Collection ---
 SYSTEM_METRICS_HISTORY_LENGTH = 1440 # 24 hours * 60 minutes
@@ -38,7 +47,7 @@ def collect_system_metrics():
         redis_client.ltrim('memory_history', 0, SYSTEM_METRICS_HISTORY_LENGTH - 1)
 
         # Disk Usage (for root partition)
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage('/host')
         disk_percent = disk.percent
         redis_client.lpush('disk_history', f"{timestamp}:{disk_percent}")
         redis_client.ltrim('disk_history', 0, SYSTEM_METRICS_HISTORY_LENGTH - 1)
@@ -210,6 +219,17 @@ def index():
         network_sent_data.append(int(sent))
         network_recv_data.append(int(recv))
 
+    # Fetch WAF rules for display
+    waf_mode = redis_client.get('waf:mode')
+    if waf_mode:
+        waf_mode = waf_mode.decode('utf-8')
+    else:
+        waf_mode = 'block' # Default mode
+
+    ip_blacklist = [ip.decode('utf-8') for ip in redis_client.smembers('waf:ip_blacklist')]
+    sql_patterns = [pattern.decode('utf-8') for pattern in redis_client.smembers('waf:sql_patterns')]
+    xss_patterns = [pattern.decode('utf-8') for pattern in redis_client.smembers('waf:xss_patterns')]
+
     return render_template('index.html', 
                            unique_ips=unique_ips, 
                            total_requests_24h=total_requests_24h,
@@ -226,7 +246,11 @@ def index():
                            disk_data=disk_data,
                            network_labels=network_labels,
                            network_sent_data=network_sent_data,
-                           network_recv_data=network_recv_data)
+                           network_recv_data=network_recv_data,
+                           waf_mode=waf_mode,
+                           ip_blacklist=ip_blacklist,
+                           sql_patterns=sql_patterns,
+                           xss_patterns=xss_patterns)
 
 @app.route('/api/metrics')
 def get_metrics():
@@ -401,11 +425,53 @@ def remove_container(container_id):
     except Exception as e:
         return jsonify({'success': False, 'message': f'An unexpected error occurred: {e}'}), 500
 
-# Placeholder for WAF rule configuration (will be implemented in Phase 2)
-@app.route('/configure_waf/<container_name>', methods=['GET', 'POST'])
-def configure_waf(container_name):
-    # In Phase 2, we will fetch/save rules for this container from Redis
-    return f"Configure WAF for {container_name}"
+@app.route('/waf_rules', methods=['GET', 'POST'])
+def waf_rules():
+    if request.method == 'POST':
+        # Update WAF Mode
+        new_waf_mode = request.form.get('waf_mode')
+        if new_waf_mode in ['block', 'monitor']:
+            redis_client.set('waf:mode', new_waf_mode)
+
+        # Update IP Blacklist
+        new_ip_blacklist_str = request.form.get('ip_blacklist', '')
+        new_ip_blacklist = [ip.strip() for ip in new_ip_blacklist_str.split(',') if ip.strip()]
+        redis_client.delete('waf:ip_blacklist')
+        if new_ip_blacklist:
+            redis_client.sadd('waf:ip_blacklist', *new_ip_blacklist)
+
+        # Update SQL Patterns
+        new_sql_patterns_str = request.form.get('sql_patterns', '')
+        new_sql_patterns = [pattern.strip() for pattern in new_sql_patterns_str.split(',') if pattern.strip()]
+        redis_client.delete('waf:sql_patterns')
+        if new_sql_patterns:
+            redis_client.sadd('waf:sql_patterns', *new_sql_patterns)
+
+        # Update XSS Patterns
+        new_xss_patterns_str = request.form.get('xss_patterns', '')
+        new_xss_patterns = [pattern.strip() for pattern in new_xss_patterns_str.split(',') if pattern.strip()]
+        redis_client.delete('waf:xss_patterns')
+        if new_xss_patterns:
+            redis_client.sadd('waf:xss_patterns', *new_xss_patterns)
+
+        return redirect(url_for('waf_rules'))
+
+    # GET request: Fetch current WAF rules
+    waf_mode = redis_client.get('waf:mode')
+    if waf_mode:
+        waf_mode = waf_mode.decode('utf-8')
+    else:
+        waf_mode = 'block' # Default mode
+
+    ip_blacklist = [ip.decode('utf-8') for ip in redis_client.smembers('waf:ip_blacklist')]
+    sql_patterns = [pattern.decode('utf-8') for pattern in redis_client.smembers('waf:sql_patterns')]
+    xss_patterns = [pattern.decode('utf-8') for pattern in redis_client.smembers('waf:xss_patterns')]
+
+    return render_template('waf_rules.html',
+                           waf_mode=waf_mode,
+                           ip_blacklist=ip_blacklist,
+                           sql_patterns=sql_patterns,
+                           xss_patterns=xss_patterns)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

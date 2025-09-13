@@ -1,9 +1,44 @@
 local redis = require "resty.redis"
 
-local ip_blacklist = {
-    ["192.168.1.1"] = true,
-    ["10.0.0.5"] = true,
-}
+local function get_ip_blacklist(red)
+    local ips, err = red:smembers("waf:ip_blacklist")
+    if not ips then
+        ngx.log(ngx.ERR, "failed to get ip blacklist from redis: ", err)
+        return {}
+    end
+    local blacklist = {}
+    for _, ip in ipairs(ips) do
+        blacklist[ip] = true
+    end
+    return blacklist
+end
+
+local function get_sql_patterns(red)
+    local patterns, err = red:smembers("waf:sql_patterns")
+    if not patterns then
+        ngx.log(ngx.ERR, "failed to get sql patterns from redis: ", err)
+        return {}
+    end
+    return patterns
+end
+
+local function get_xss_patterns(red)
+    local patterns, err = red:smembers("waf:xss_patterns")
+    if not patterns then
+        ngx.log(ngx.ERR, "failed to get xss patterns from redis: ", err)
+        return {}
+    end
+    return patterns
+end
+
+local function get_waf_mode(red)
+    local mode, err = red:get("waf:mode")
+    if not mode then
+        ngx.log(ngx.WARN, "failed to get waf mode from redis, defaulting to block: ", err)
+        return "block" -- Default to block if not set
+    end
+    return mode
+end
 
 local sql_patterns = {
     "union select",
@@ -104,47 +139,66 @@ if not ok then
     ngx.log(ngx.ERR, "failed to schedule initial snapshot_history: ", err)
 end
 
-local function check_blacklist_ip()
+local function check_blacklist_ip(red, waf_mode)
+    local ip_blacklist = get_ip_blacklist(red)
     local remote_addr = ngx.var.remote_addr
     if ip_blacklist[remote_addr] then
         ngx.log(ngx.ERR, "Blocked blacklisted IP: ", remote_addr)
-        ngx.exit(ngx.HTTP_FORBIDDEN)
+        if waf_mode == "block" then
+            ngx.exit(ngx.HTTP_FORBIDDEN)
+        end
     end
 end
 
-local function check_sql_injection(args)
+local function check_sql_injection(red, waf_mode, args)
+    local sql_patterns = get_sql_patterns(red)
     for _, pattern in ipairs(sql_patterns) do
         if ngx.re.find(args, pattern, "ijo") then
             ngx.log(ngx.ERR, "Blocked SQL injection attempt: ", args)
-            ngx.exit(ngx.HTTP_FORBIDDEN)
+            if waf_mode == "block" then
+                ngx.exit(ngx.HTTP_FORBIDDEN)
+            end
         end
     end
 end
 
-local function check_xss(args)
+local function check_xss(red, waf_mode, args)
+    local xss_patterns = get_xss_patterns(red)
     for _, pattern in ipairs(xss_patterns) do
         if ngx.re.find(args, pattern, "ijo") then
             ngx.log(ngx.ERR, "Blocked XSS attempt: ", args)
-            ngx.exit(ngx.HTTP_FORBIDDEN)
+            if waf_mode == "block" then
+                ngx.exit(ngx.HTTP_FORBIDDEN)
+            end
         end
     end
-}
+end
 
 local function waf_main()
     log_access_data() -- Log access data before applying WAF rules
-    check_blacklist_ip()
+
+    local red = get_redis_client()
+    if not red then
+        return
+    end
+
+    local waf_mode = get_waf_mode(red)
+
+    check_blacklist_ip(red, waf_mode)
 
     local uri_args = ngx.var.args
     if uri_args then
-        check_sql_injection(uri_args)
-        check_xss(uri_args)
+        check_sql_injection(red, waf_mode, uri_args)
+        check_xss(red, waf_mode, uri_args)
     end
 
     local request_body = ngx.req.get_body_data()
     if request_body then
-        check_sql_injection(request_body)
-        check_xss(request_body)
+        check_sql_injection(red, waf_mode, request_body)
+        check_xss(red, waf_mode, request_body)
     end
+
+    red:close()
 end
 
 waf_main()

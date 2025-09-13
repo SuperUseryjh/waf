@@ -371,6 +371,7 @@
         <h2>WAF Dashboard</h2>
         <ul>
             <li><a href="#" class="active" onclick="showPanel('waf-monitor')"><i class="fas fa-shield-alt"></i><span>WAF 监控</span></a></li>
+            <li><a href="{{ url_for('waf_rules') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('waf_rules') }}';"><i class="fas fa-cog"></i><span>WAF 规则管理</span></a></li>
             <li><a href="#" onclick="showPanel('system-monitor')"><i class="fas fa-server"></i><span>系统资源监控</span></a></li>
             <li><a href="#" onclick="showPanel('docker-containers')"><i class="fab fa-docker"></i><span>Docker 容器</span></a></li>
         </ul>
@@ -482,7 +483,7 @@
                                 <button class="action-button" onclick="manageContainer('{{ container.id }}', 'restart')"><i class="fas fa-sync-alt"></i> 重启</button>
                                 <button class="action-button secondary" onclick="removeContainer('{{ container.id }}', '{{ container.name }}')"><i class="fas fa-trash-alt"></i> 删除</button>
                                 <button class="action-button" onclick="showContainerDetails('{{ container.id }}', '{{ container.name }}')"><i class="fas fa-chart-line"></i> 查看详情</button>
-                                <a href="{{ url_for('configure_waf', container_name=container.name) }}" class="action-link">配置 WAF</a>
+                                
                             </td>
                         </tr>
                         {% endfor %}

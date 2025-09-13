@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAF 规则管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #50e3c2;
+            --background-light: #f0f2f5;
+            --background-dark: #2c3e50;
+            --text-color-dark: #333;
+            --text-color-light: #ecf0f1;
+            --card-background: #ffffff;
+            --border-color: #e0e0e0;
+            --shadow-light: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.12);
+            --font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            margin: 0;
+            background-color: var(--background-light);
+            color: var(--text-color-dark);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 220px;
+            background-color: var(--background-dark);
+            color: var(--text-color-light);
+            padding: 20px 0;
+            height: 100vh;
+            box-shadow: var(--shadow-light);
+            position: fixed;
+            left: 0;
+            top: 0;
+            transition: width 0.3s ease, box-shadow 0.3s ease;
+            overflow-x: hidden;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar.collapsed {
+            width: 70px;
+        }
+        .sidebar.collapsed h2, .sidebar.collapsed ul li a span {
+            display: none;
+        }
+        .sidebar.collapsed .toggle-btn {
+            text-align: center;
+        }
+        .sidebar.collapsed .toggle-btn::before {
+            content: '\25B6'; /* Right arrow */
+        }
+        .toggle-btn {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--text-color-light);
+            border: none;
+            padding: 15px 20px;
+            width: 100%;
+            text-align: right;
+            cursor: pointer;
+            font-size: 1.2em;
+            position: sticky; /* Make it stick to the bottom */
+            bottom: 0;
+            left: 0;
+            transition: background-color 0.3s ease;
+        }
+        .toggle-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .toggle-btn::before {
+            content: '\25C0'; /* Left arrow */
+        }
+
+        .sidebar h2 {
+            color: var(--text-color-light);
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.8em;
+            font-weight: 600;
+            padding: 0 20px;
+        }
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            flex-grow: 1; /* Allow menu to grow */
+        }
+        .sidebar ul li {
+            margin-bottom: 8px;
+        }
+        .sidebar ul li a {
+            color: var(--text-color-light);
+            text-decoration: none;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            border-radius: 6px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .sidebar ul li a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: var(--secondary-color);
+        }
+        .sidebar ul li a.active {
+            background-color: var(--primary-color);
+            color: var(--text-color-light);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        .sidebar ul li a.active:hover {
+            background-color: var(--primary-color); /* Keep active color on hover */
+        }
+        .sidebar ul li a span {
+            margin-left: 15px;
+            font-size: 1.1em;
+        }
+        .sidebar ul li a i { /* New style for icons */
+            font-size: 1.2em;
+            width: 20px; /* Fixed width for alignment */
+            text-align: center;
+        }
+        .sidebar.collapsed ul li a {
+            justify-content: center; /* Center icon when collapsed */
+            padding: 12px 0; /* Adjust padding for collapsed state */
+        }
+        .sidebar.collapsed ul li a i {
+            margin-left: 0; /* Remove margin when collapsed */
+        }
+
+
+        .main-content {
+            flex-grow: 1;
+            padding: 30px;
+            margin-left: 220px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 70px;
+        }
+
+        .container {
+            background-color: var(--card-background);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-light);
+            max-width: 1400px;
+            margin: auto;
+            margin-bottom: 25px;
+            transition: box-shadow 0.3s ease;
+        }
+        .container:hover {
+            box-shadow: var(--shadow-hover);
+        }
+
+        h1, h2 {
+            color: var(--primary-color);
+            text-align: left; /* Align titles to left */
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        h1 {
+            font-size: 2.2em;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            font-size: 1.6em;
+        }
+
+        .form-container {
+            background-color: var(--background-light);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        .form-container h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--text-color-dark);
+        }
+        .form-group input[type="text"],
+        .form-group textarea,
+        .form-group select {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .form-group small {
+            color: #666;
+            font-size: 0.85em;
+            margin-top: 5px;
+            display: block;
+        }
+        .action-button {
+            background-color: var(--primary-color);
+            color: var(--text-color-light);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 10px;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .action-button:hover {
+            background-color: #3a7bd5;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .action-button.secondary {
+            background-color: #6c757d;
+        }
+        .action-button.secondary:hover {
+            background-color: #5a6268;
+        }
+        .message-box {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: 500;
+            text-align: center;
+        }
+        .message-box.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message-box.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+                padding: 15px 0;
+            }
+            .sidebar h2, .sidebar ul li a span {
+                display: none;
+            }
+            .sidebar .toggle-btn {
+                text-align: center;
+            }
+            .sidebar .toggle-btn::before {
+                content: '\25B6';
+            }
+            .main-content {
+                margin-left: 70px;
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar" id="sidebar">
+        <h2>WAF Dashboard</h2>
+        <ul>
+            <li><a href="{{ url_for('index') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('index') }}';"><i class="fas fa-shield-alt"></i><span>WAF 监控</span></a></li>
+            <li><a href="{{ url_for('waf_rules') }}" class="active"><i class="fas fa-cog"></i><span>WAF 规则管理</span></a></li>
+            <li><a href="{{ url_for('index') }}" onclick="event.preventDefault(); showPanel('system-monitor');"><i class="fas fa-server"></i><span>系统资源监控</span></a></li>
+            <li><a href="{{ url_for('index') }}" onclick="event.preventDefault(); showPanel('docker-containers');"><i class="fab fa-docker"></i><span>Docker 容器</span></a></li>
+        </ul>
+        <button class="toggle-btn" onclick="toggleSidebar()"></button>
+    </div>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <h1>WAF 规则管理</h1>
+
+            <form action="{{ url_for('waf_rules') }}" method="POST">
+                <div class="form-container">
+                    <h3>WAF 运行模式</h3>
+                    <div class="form-group">
+                        <label for="waf_mode">选择模式:</label>
+                        <select id="waf_mode" name="waf_mode">
+                            <option value="block" {% if waf_mode == 'block' %}selected{% endif %}>阻止模式 (Block)</option>
+                            <option value="monitor" {% if waf_mode == 'monitor' %}selected{% endif %}>监控模式 (Monitor)</option>
+                        </select>
+                        <small>阻止模式会拦截匹配规则的请求；监控模式只记录不拦截。</small>
+                    </div>
+                </div>
+
+                <div class="form-container">
+                    <h3>IP 黑名单</h3>
+                    <div class="form-group">
+                        <label for="ip_blacklist">IP 地址 (逗号分隔):</label>
+                        <textarea id="ip_blacklist" name="ip_blacklist" rows="5">{{ ip_blacklist | join(', ') }}</textarea>
+                        <small>输入要阻止的 IP 地址，多个 IP 用逗号分隔。</small>
+                    </div>
+                </div>
+
+                <div class="form-container">
+                    <h3>SQL 注入模式</h3>
+                    <div class="form-group">
+                        <label for="sql_patterns">SQL 注入模式 (逗号分隔):</label>
+                        <textarea id="sql_patterns" name="sql_patterns" rows="5">{{ sql_patterns | join(', ') }}</textarea>
+                        <small>输入用于检测 SQL 注入的正则表达式模式，多个模式用逗号分隔。</small>
+                    </div>
+                </div>
+
+                <div class="form-container">
+                    <h3>XSS 攻击模式</h3>
+                    <div class="form-group">
+                        <label for="xss_patterns">XSS 攻击模式 (逗号分隔):</label>
+                        <textarea id="xss_patterns" name="xss_patterns" rows="5">{{ xss_patterns | join(', ') }}</textarea>
+                        <small>输入用于检测 XSS 攻击的正则表达式模式，多个模式用逗号分隔。</small>
+                    </div>
+                </div>
+
+                <button type="submit" class="action-button"><i class="fas fa-save"></i> 保存 WAF 规则</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('collapsed');
+        }
+    </script>
+</body>
+</html>
